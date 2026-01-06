@@ -1,24 +1,7 @@
 import { json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
 import { prisma } from '$lib/server/prisma'
-
-type HouseholdDto = {
-	id: string
-	name: string
-}
-
-async function getOrCreateDefaultHousehold(): Promise<HouseholdDto> {
-	const existing = await prisma.household.findFirst({
-		select: { id: true, name: true }
-	})
-
-	if (existing) return existing
-
-	return prisma.household.create({
-		data: { name: 'Household' },
-		select: { id: true, name: true }
-	})
-}
+import { getOrCreateDefaultHousehold } from '$lib/server/household'
 
 export const GET: RequestHandler = async () => {
 	const household = await getOrCreateDefaultHousehold()

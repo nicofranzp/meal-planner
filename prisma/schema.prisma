@@ -41,7 +41,7 @@ model Person {
   id                    String @id @default(cuid())
   householdId           String
   name                  String
-  portionFactor         Float
+  portionFactor         Float @default(1.0)
   dislikedIngredientIds Json
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)

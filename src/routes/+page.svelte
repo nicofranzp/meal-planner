@@ -11,6 +11,20 @@
 	let error = $state<string | null>(null)
 	let savedMessage = $state<string | null>(null)
 
+	type PersonDto = {
+		id: string
+		householdId: string
+		name: string
+		portionFactor: number
+	}
+
+	let people = $state<PersonDto[]>([])
+	let peopleLoading = $state(true)
+	let peopleError = $state<string | null>(null)
+	let addingPerson = $state(false)
+	let personName = $state('')
+	let personPortionFactor = $state('1.0')
+
 	async function loadHousehold() {
 		loading = true
 		error = null
@@ -64,8 +78,65 @@
 		}
 	}
 
+	async function loadPeople() {
+		peopleLoading = true
+		peopleError = null
+
+		try {
+			const res = await fetch('/api/people')
+			if (!res.ok) {
+				peopleError = `Failed to load people (${res.status})`
+				people = []
+				return
+			}
+
+			const data = (await res.json()) as { householdId: string; people: PersonDto[] }
+			people = data.people
+		} catch {
+			peopleError = 'Failed to load people'
+			people = []
+		} finally {
+			peopleLoading = false
+		}
+	}
+
+	async function addPerson() {
+		addingPerson = true
+		peopleError = null
+		savedMessage = null
+
+		try {
+			const trimmed = personName.trim()
+			const portion = Number(personPortionFactor)
+
+			const res = await fetch('/api/people', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					name: trimmed,
+					portionFactor: Number.isFinite(portion) ? portion : undefined
+				})
+			})
+
+			if (!res.ok) {
+				const payload = (await res.json().catch(() => null)) as { message?: string } | null
+				peopleError = payload?.message ?? `Failed to add (${res.status})`
+				return
+			}
+
+			personName = ''
+			personPortionFactor = '1.0'
+			await loadPeople()
+		} catch {
+			peopleError = 'Failed to add person'
+		} finally {
+			addingPerson = false
+		}
+	}
+
 	$effect(() => {
 		void loadHousehold()
+		void loadPeople()
 	})
 </script>
 
@@ -111,6 +182,78 @@
 				{/if}
 			</div>
 		</form>
+
+		<section class="mt-10">
+			<h2 class="text-xl font-semibold">People</h2>
+
+			{#if peopleLoading}
+				<p class="mt-3">Loading…</p>
+			{:else if peopleError}
+				<p class="mt-3 text-red-600">{peopleError}</p>
+			{/if}
+
+			<form
+				class="mt-4 grid gap-3"
+				onsubmit={(e) => {
+					e.preventDefault()
+					void addPerson()
+				}}
+			>
+				<label class="block">
+					<span class="block text-sm font-medium">Name</span>
+					<input
+						class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+						type="text"
+						value={personName}
+						oninput={(e) => {
+							personName = (e.currentTarget as HTMLInputElement).value
+						}}
+						disabled={addingPerson}
+						autocomplete="off"
+					/>
+				</label>
+
+				<label class="block">
+					<span class="block text-sm font-medium">Portion factor</span>
+					<input
+						class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+						type="number"
+						step="0.1"
+						min="0.1"
+						value={personPortionFactor}
+						oninput={(e) => {
+							personPortionFactor = (e.currentTarget as HTMLInputElement).value
+						}}
+						disabled={addingPerson}
+					/>
+				</label>
+
+				<div class="flex items-center gap-3">
+					<button
+						class="rounded bg-black px-4 py-2 text-white disabled:opacity-60"
+						type="submit"
+						disabled={addingPerson}
+					>
+						{addingPerson ? 'Adding…' : 'Add person'}
+					</button>
+				</div>
+			</form>
+
+			{#if !peopleLoading && !peopleError}
+				{#if people.length === 0}
+					<p class="mt-4 text-sm">No people yet.</p>
+				{:else}
+					<ul class="mt-4 space-y-2">
+						{#each people as person (person.id)}
+							<li class="rounded border border-gray-200 px-3 py-2">
+								<div class="font-medium">{person.name}</div>
+								<div class="text-sm text-gray-600">Portion factor: {person.portionFactor}</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{/if}
+		</section>
 	{:else}
 		<p class="mt-4">No household found.</p>
 	{/if}
