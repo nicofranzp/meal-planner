@@ -626,3 +626,108 @@ Add a “Meal Plans” page:
 - Reuse the default household helper.
 - Prepare code structure for MealPlanDay but do not implement it.
 
+## FEATURE: MealPlanDay + MealPlanItem
+
+Extend the Meal Plans feature by implementing the Day + Item structure.
+Do NOT implement meal generation, scaling logic, or AI.
+This is structural only — matching the incremental pattern of previous features.
+
+### Domain Rules
+
+- A MealPlan contains multiple MealPlanDays.
+- A MealPlanDay contains multiple MealPlanItems.
+- A MealPlanItem references a Recipe.
+- No automatic date-range logic yet (dates are manually created).
+- No quantity scaling or pantry deduction yet (future features).
+
+### MealPlanDay fields
+
+- id: string (cuid, primary key)
+- mealPlanId: string (FK → MealPlan)
+- date: string (ISO date; user-provided)
+- createdAt
+- updatedAt
+
+### MealPlanItem fields
+
+- id: string (cuid, primary key)
+- dayId: string (FK → MealPlanDay)
+- recipeId: string (FK → Recipe)
+- mealType: enum("breakfast", "lunch", "dinner", "snack")
+- servings: number (required; integer or float)
+- createdAt
+- updatedAt
+
+### Relationships
+
+- MealPlan has many MealPlanDays
+- MealPlanDay has many MealPlanItems
+- MealPlanItem belongs to MealPlanDay and Recipe
+- Recipe belongs to Household (already implemented)
+- All data scoped to the default Household
+
+### API Requirements (REST)
+
+Add endpoints under:
+
+#### MealPlanDay
+
+1. **GET /api/mealplans/:id/days**
+   - Returns all days for a given meal plan
+   - Sorted by date ascending
+   - Includes items with recipe metadata
+
+2. **POST /api/mealplans/:id/days**
+   - Create a new day for a meal plan
+   - Body:
+     - date (required ISO string)
+
+3. **DELETE /api/mealplans/:id/days/:dayId**
+   - Deletes a meal plan day
+   - Cascades meal plan items
+
+#### MealPlanItem
+
+1. **POST /api/mealplans/:id/days/:dayId/items**
+   - Create a meal plan item
+   - Body:
+     - recipeId (required)
+     - mealType ("breakfast" | "lunch" | "dinner" | "snack")
+     - servings (number)
+
+2. **PATCH /api/mealplans/:id/days/:dayId/items/:itemId**
+   - Update mealType or servings
+
+3. **DELETE /api/mealplans/:id/days/:dayId/items/:itemId**
+   - Remove an item
+
+### UI Requirements (SvelteKit)
+
+Add a MealPlan Detail Page under:
+`src/routes/mealplans/[mealPlanId]/+page.svelte`
+
+#### MealPlan Detail Page
+
+- Show meal plan name + status
+- Button: “Add Day”
+- Days list (grouped by date)
+- For each day:
+  - List items with:
+    - recipe name
+    - mealType
+    - servings
+  - “Add Item” → opens form:
+    - Select recipe
+    - Select mealType
+    - Input servings
+- Ability to delete a day
+- Ability to delete an item
+
+### Technical Requirements
+
+- Update Prisma schema with two new models
+- Add migration
+- Use cascade deletes
+- Use Svelte 5 runes ($state, $effect)
+- Follow naming conventions and file structure used by previous features
+- Keep REST endpoints parallel to People / Ingredients / Recipes / Pantry patterns

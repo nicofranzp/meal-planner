@@ -24,6 +24,13 @@ enum PantryAvailability {
 	OUT
 }
 
+enum MealPlanItemMealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
 model Household {
   id   String @id @default(cuid())
   name String
@@ -73,6 +80,7 @@ model Recipe {
 
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   ingredients RecipeIngredient[]
+  mealPlanItems MealPlanItem[]
   meals       Meal[]
 
   @@index([householdId])
@@ -134,9 +142,40 @@ model MealPlan {
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   template  Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   meals     Meal[]
+  days     MealPlanDay[]
 
   @@index([householdId])
   @@index([templateId])
+}
+
+model MealPlanDay {
+  id         String   @id @default(cuid())
+  mealPlanId String
+  date       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  mealPlan MealPlan       @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  items    MealPlanItem[]
+
+  @@index([mealPlanId])
+  @@index([date])
+}
+
+model MealPlanItem {
+  id        String             @id @default(cuid())
+  dayId     String
+  recipeId  String
+  mealType  MealPlanItemMealType
+  servings  Float
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  day    MealPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  recipe Recipe      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([dayId])
+  @@index([recipeId])
 }
 
 model Meal {
