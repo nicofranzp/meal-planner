@@ -19,11 +19,9 @@ enum MealPlanStatus {
 }
 
 enum PantryAvailability {
-  none
-  low
-  medium
-  high
-  unknown
+	HAVE
+	LOW
+	OUT
 }
 
 model Household {
@@ -159,13 +157,17 @@ model Guest {
 }
 
 model PantryItem {
-  householdId  String
-  ingredientId String
-  availability PantryAvailability
+  id           String            @id @default(cuid())
+  householdId   String
+  ingredientId  String
+  availability  PantryAvailability @default(HAVE)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   household  Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
   ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
-  @@id([householdId, ingredientId])
+  @@unique([householdId, ingredientId])
+  @@index([householdId])
   @@index([ingredientId])
 }

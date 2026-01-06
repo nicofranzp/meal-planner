@@ -418,3 +418,53 @@ Implement the Ingredient entity.
 - Svelte 5 runes
 - Prisma + SQLite
 - Prisma Client only (no raw SQL)
+
+---
+
+## FEATURE: Pantry (Household Inventory)
+
+Implement the household Pantry and PantryItem features.
+
+### Domain rules
+
+- Each Household has exactly one Pantry.
+- A Pantry stores PantryItems.
+- A PantryItem links:
+  - householdId
+  - ingredientId
+  - availability
+- Ingredient remains global.
+- Availability is coarse (no quantities yet).
+
+### PantryItem fields
+
+- id: string (cuid, primary key)
+- householdId: string (FK to Household)
+- ingredientId: string (FK to Ingredient)
+- availability: enum PantryAvailability (HAVE | LOW | OUT)
+- createdAt
+- updatedAt
+
+### Enum
+
+Create enum `PantryAvailability`:
+
+- HAVE
+- LOW
+- OUT
+
+### API Requirements
+
+Create REST API endpoints under `/api/pantry`:
+
+1. **GET /api/pantry**
+   - Returns all PantryItems for the current household
+   - Includes Ingredient info
+
+2. **POST /api/pantry**
+   - Creates a PantryItem for the current household
+   - Body: ingredientId, availability (default HAVE)
+   - Prevent duplicate ingredient entries in pantry
+
+3. **PATCH /api/pantry/:id**
+   - Up
