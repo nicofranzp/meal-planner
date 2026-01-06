@@ -377,7 +377,6 @@ Leave a TODO or ask the developer.
 
 Copilot must never assume product behavior.
 
-
 ---
 
 ## FEATURE: Ingredient
@@ -468,3 +467,124 @@ Create REST API endpoints under `/api/pantry`:
 
 3. **PATCH /api/pantry/:id**
    - Up
+
+---
+
+## FEATURE: Recipe (Hybrid Model)
+
+Implement the Recipe feature using a hybrid structured + free-text design.
+
+### Domain Rules
+
+- Recipes belong to the Household (each household manages its own recipes).
+- A Recipe contains:
+  - Structured, machine-actionable ingredient list
+  - Free-text instructions
+  - Optional free-text notes
+- Recipe servings determine how quantities scale for households of different sizes.
+
+### Recipe fields
+
+- id: string (cuid, primary key)
+- householdId: string (FK → Household)
+- name: string
+- description: string? (optional short description)
+- servings: number (base servings for the recipe)
+- instructions: string (free-text, markdown allowed)
+- notes: string? (free-text, optional)
+- createdAt
+- updatedAt
+
+### RecipeIngredient fields
+
+- id: string (cuid, primary key)
+- recipeId: string (FK → Recipe)
+- ingredientId: string (FK → Ingredient)
+- quantity: number (required; float)
+- unit: string (optional; defaults to Ingredient.unit if not provided)
+- createdAt
+- updatedAt
+
+### Relationships
+
+- Recipe has many RecipeIngredients
+- RecipeIngredient belongs to Ingredient
+- Recipe belongs to Household
+
+### API Requirements (REST)
+
+Create endpoints under `/api/recipes`:
+
+1. **GET /api/recipes**
+   - Returns all recipes for the current household
+   - Include recipeIngredients with Ingredient info
+
+2. **POST /api/recipes**
+   - Create a recipe
+   - Body:
+     - name (required)
+     - description (optional)
+     - servings (required)
+     - instructions (required)
+     - notes (optional)
+     - ingredients: array of `{ ingredientId, quantity, unit? }`
+
+3. **GET /api/recipes/:id**
+   - Returns a single recipe with full ingredient list
+
+4. **PATCH /api/recipes/:id**
+   - Updates recipe fields (name, description, servings, instructions, notes)
+
+5. **PATCH /api/recipes/:id/ingredients**
+   - Replaces the full ingredient list for the recipe
+   - Prevent duplicates
+   - Enforces ingredientId validity
+
+6. **DELETE /api/recipes/:id**
+   - Deletes the recipe
+   - Cascades to RecipeIngredients
+
+### UI Requirements (SvelteKit)
+
+Add a “Recipes” page with:
+
+#### Recipe List
+
+- List all recipes
+- Each item: name + servings + small description
+- Button: “Add Recipe”
+- Click on a recipe → open detail page
+
+#### Recipe Form (Create/Edit)
+
+Fields:
+
+- name (text)
+- description (optional)
+- servings (number)
+- instructions (textarea or markdown input)
+- notes (optional textarea)
+- Ingredient list editor:
+  - Add ingredient row: select ingredient + quantity + unit
+  - Remove ingredient row
+  - Persist all via POST/PATCH
+
+#### Recipe Detail Page
+
+- Name, description, servings
+- Instructions (rendered as text)
+- Notes
+- Ingredient list with quantities and units
+- Buttons:
+  - “Edit”
+  - “Delete”
+  - “Scale servings” (UI only, optional for MVP)
+
+### Technical Requirements
+
+- Use Prisma + SQLite
+- Cascade deletes (Recipe → RecipeIngredients)
+- Use Svelte 5 runes throughout
+- Keep API + UI consistent with Household, Person, Ingredient, and Pantry features
+- No AI logic yet (this will come later after Meal Plans)
+

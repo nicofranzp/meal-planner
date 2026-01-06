@@ -319,7 +319,10 @@
 </script>
 
 <main class="mx-auto max-w-xl p-6">
-	<h1 class="text-2xl font-semibold">Household</h1>
+	<div class="flex items-center justify-between gap-4">
+		<h1 class="text-2xl font-semibold">Household</h1>
+		<a class="text-sm underline" href="/recipes">Recipes</a>
+	</div>
 
 	{#if loading}
 		<p class="mt-4">Loading…</p>

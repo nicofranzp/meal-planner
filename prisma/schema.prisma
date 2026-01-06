@@ -61,14 +61,17 @@ model Ingredient {
 }
 
 model Recipe {
-  id           String @id @default(cuid())
-  householdId  String
-  name         String
-  baseServings Int
-  tags         Json
-  steps        String
+  id          String   @id @default(cuid())
+  householdId String
+  name        String
+  description String?
+  servings    Float
+  instructions String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  household   Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   ingredients RecipeIngredient[]
   meals       Meal[]
 
@@ -76,15 +79,19 @@ model Recipe {
 }
 
 model RecipeIngredient {
+  id           String   @id @default(cuid())
   recipeId     String
   ingredientId String
   quantity     Float
   unit         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
-  @@id([recipeId, ingredientId])
+  @@unique([recipeId, ingredientId])
+  @@index([recipeId])
   @@index([ingredientId])
 }
 
