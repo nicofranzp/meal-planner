@@ -146,11 +146,16 @@
 		{:else}
 			<ul class="mt-4 space-y-3">
 				{#each mealPlans as mp (mp.id)}
-					<li class="rounded border border-gray-200 p-3">
-						<div class="flex items-baseline justify-between gap-3">
-							<span class="font-medium">{mp.name}</span>
-							<span class="text-sm text-gray-700">{mp.status}</span>
-						</div>
+					<li>
+						<a
+							class="block rounded border border-gray-200 p-3 hover:bg-gray-50"
+							href={`/mealplans/${mp.id}`}
+						>
+							<div class="flex items-baseline justify-between gap-3">
+								<span class="font-medium">{mp.name}</span>
+								<span class="text-sm text-gray-700">{mp.status}</span>
+							</div>
+						</a>
 					</li>
 				{/each}
 			</ul>

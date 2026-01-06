@@ -3,25 +3,34 @@
 
 	type MealPlanDto = {
 		id: string
-		householdId: string
 		name: string
 		status: MealPlanStatus
-		createdAt: string
-		updatedAt: string
+		days: DayDto[]
+		items: ItemDto[]
 	}
 
 	type DayItemDto = {
 		id: string
 		dayId: string
 		recipeId: string
-		recipe: { id: string; name: string }
+		recipeName: string
+		mealType: string
+		servings: number
 	}
 
 	type DayDto = {
 		id: string
-		mealPlanId: string
 		date: string
 		items: DayItemDto[]
+	}
+
+	type ItemDto = {
+		id: string
+		dayId: string
+		recipeId: string
+		recipeName: string
+		mealType: string
+		servings: number
 	}
 
 	type RecipeListItem = {
@@ -35,7 +44,6 @@
 	const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
 
 	let mealPlan = $state<MealPlanDto | null>(null)
-	let days = $state<DayDto[]>([])
 	let recipes = $state<RecipeListItem[]>([])
 
 	let loading = $state(true)
@@ -73,9 +81,34 @@
 
 	const dayByDate = $derived.by(() => {
 		const map = new Map<string, DayDto>()
-		for (const d of days) map.set(d.date, d)
+		for (const d of mealPlan?.days ?? []) map.set(d.date, d)
 		return map
 	})
+
+	const dayDateById = $derived.by(() => {
+		const map = new Map<string, string>()
+		for (const d of mealPlan?.days ?? []) map.set(d.id, d.date)
+		return map
+	})
+
+	function formatDayDate(dateIso: string): string {
+		if (!dateIso) return ''
+		// dateIso is stored as YYYY-MM-DD; format in local time.
+		const parsed = new Date(`${dateIso}T00:00:00`)
+		if (!Number.isFinite(parsed.getTime())) return dateIso
+		return parsed.toLocaleDateString(undefined, {
+			weekday: 'long',
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		})
+	}
+
+	function formatServings(value: number): string {
+		if (!Number.isFinite(value)) return '0 servings'
+		if (value === 1) return '1 serving'
+		return `${value} servings`
+	}
 
 	function findRecipeIdByName(name: string): string | null {
 		const trimmed = name.trim()
@@ -91,19 +124,11 @@
 		const res = await fetch(`/api/mealplans/${params.mealPlanId}`)
 		if (res.status === 404) {
 			mealPlan = null
-			days = []
 			error = 'Meal plan not found'
 			return
 		}
 		if (!res.ok) throw new Error(`Failed to load meal plan (${res.status})`)
 		mealPlan = (await res.json()) as MealPlanDto
-	}
-
-	async function loadDays() {
-		const res = await fetch(`/api/mealplans/${params.mealPlanId}/days`)
-		if (!res.ok) throw new Error(`Failed to load days (${res.status})`)
-		const daysData = (await res.json()) as { mealPlanId: string; days: DayDto[] }
-		days = daysData.days
 	}
 
 	async function loadRecipes() {
@@ -114,15 +139,9 @@
 	}
 
 	async function refreshDayByDate(date: string) {
-		const res = await fetch(`/api/mealplans/${params.mealPlanId}/days`)
-		if (!res.ok) throw new Error(`Failed to refresh day (${res.status})`)
-		const daysData = (await res.json()) as { mealPlanId: string; days: DayDto[] }
-		const refreshed = daysData.days.find((d) => d.date === date)
-		if (!refreshed) {
-			days = days.filter((d) => d.date !== date)
-			return
-		}
-		days = days.map((d) => (d.date === date ? refreshed : d))
+		// Keep using existing Day/Item endpoints for CRUD/refresh behavior.
+		// After changes, reload the meal plan snapshot so days/items stay in sync.
+		await loadMealPlan()
 	}
 
 	async function ensureDayExists(date: string): Promise<DayDto> {
@@ -141,7 +160,9 @@
 				throw new Error(payload?.message ?? `Failed to create day (${res.status})`)
 			}
 			const created = (await res.json()) as DayDto
-			days = [...days, created]
+			mealPlan = mealPlan
+				? { ...mealPlan, days: [...mealPlan.days, created], items: mealPlan.items }
+				: { id: params.mealPlanId, name: '', status: 'draft', days: [created], items: [] }
 			return created
 		} finally {
 			creatingDayForDate = null
@@ -196,10 +217,9 @@
 		error = null
 		void (async () => {
 			try {
-				await Promise.all([loadMealPlan(), loadDays(), loadRecipes()])
+				await Promise.all([loadMealPlan(), loadRecipes()])
 			} catch (e) {
 				mealPlan = null
-				days = []
 				recipes = []
 				error = e instanceof Error ? e.message : 'Failed to load'
 			} finally {
@@ -212,12 +232,12 @@
 <main class="mx-auto max-w-5xl p-6">
 	<div class="flex items-center justify-between gap-4">
 		<div>
-			<h1 class="text-2xl font-semibold">Meal Plan</h1>
+			<h1 class="text-2xl font-semibold">{mealPlan ? mealPlan.name : 'Meal Plan'}</h1>
 			{#if mealPlan}
-				<p class="mt-1 text-sm text-gray-700">{mealPlan.name} — {mealPlan.status}</p>
+				<p class="mt-1 text-sm text-gray-700">Status: {mealPlan.status}</p>
 			{/if}
 		</div>
-		<a class="text-sm underline" href="/mealplans">Back</a>
+		<a class="text-sm underline" href="/mealplans">Back to Meal Plans</a>
 	</div>
 
 	{#if loading}
@@ -255,7 +275,7 @@
 								{:else}
 									<ul class="mt-3 space-y-2">
 										{#each day.items as item (item.id)}
-											<li class="rounded border border-gray-100 px-2 py-1 text-sm">{item.recipe.name}</li>
+											<li class="rounded border border-gray-100 px-2 py-1 text-sm">{item.recipeName}</li>
 										{/each}
 									</ul>
 								{/if}
@@ -317,6 +337,52 @@
 					<option value={r.name}></option>
 				{/each}
 			</datalist>
+		</section>
+
+		<section class="mt-10">
+			<h2 class="text-lg font-semibold">Days</h2>
+			{#if mealPlan.days.length === 0}
+				<p class="mt-2 text-sm">No days yet.</p>
+			{:else}
+				<ul class="mt-3 space-y-3">
+					{#each mealPlan.days as d (d.id)}
+						<li class="rounded border border-gray-200 p-3">
+							<p class="font-medium">{formatDayDate(d.date)}</p>
+							{#if d.items.length === 0}
+								<p class="mt-2 text-sm text-gray-700">No items</p>
+							{:else}
+								<ul class="mt-2 list-disc space-y-1 pl-5">
+									{#each d.items as it (it.id)}
+										<li class="text-sm">{it.mealType} — {it.recipeName} ({formatServings(it.servings)})</li>
+									{/each}
+								</ul>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+
+		<section class="mt-10">
+			<h2 class="text-lg font-semibold">Items</h2>
+			{#if mealPlan.items.length === 0}
+				<p class="mt-2 text-sm">No items yet.</p>
+			{:else}
+				<ul class="mt-3 space-y-2">
+					{#each mealPlan.items as it (it.id)}
+						{@const dateIso = dayDateById.get(it.dayId) ?? ''}
+						<li class="rounded border border-gray-200 px-3 py-2 text-sm">
+							<span class="font-medium">{it.mealType}</span>
+							<span class="text-gray-700"> — {it.recipeName} ({formatServings(it.servings)})</span>
+							{#if dateIso}
+								<span class="text-gray-700"> — {formatDayDate(dateIso)}</span>
+							{:else}
+								<span class="text-gray-700"> — Unknown day</span>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</section>
 	{/if}
 </main>
