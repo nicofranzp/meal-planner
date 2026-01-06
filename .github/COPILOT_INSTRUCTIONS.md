@@ -588,3 +588,41 @@ Fields:
 - Keep API + UI consistent with Household, Person, Ingredient, and Pantry features
 - No AI logic yet (this will come later after Meal Plans)
 
+---
+
+## FEATURE: MealPlans (MVP)
+
+Implement a minimal MealPlans feature.
+
+### Domain Rules
+
+- MealPlans belong to the Household.
+- A MealPlan has a `name` and a `status`.
+- MealPlan items/days are not implemented yet.
+
+### API Requirements (REST)
+
+Create endpoints under `/api/mealplans`:
+
+1. **GET /api/mealplans**
+  - Returns all meal plans for the current household.
+
+2. **POST /api/mealplans**
+  - Creates a new meal plan.
+  - Body: `{ name, status }`
+  - Response includes `items: []` (empty for now).
+
+### UI Requirements (SvelteKit)
+
+Add a “Meal Plans” page:
+
+- `src/routes/mealplans/+page.svelte`
+- Form: create meal plan (name + status select).
+- List: show meal plan name + status.
+
+### Technical Requirements
+
+- Use Prisma + SQLite.
+- Reuse the default household helper.
+- Prepare code structure for MealPlanDay but do not implement it.
+

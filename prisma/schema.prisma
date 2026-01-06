@@ -124,9 +124,12 @@ model MealPlan {
   id          String         @id @default(cuid())
   householdId String
   templateId  String?
-  startDate   String
-  endDate     String
-  status      MealPlanStatus
+  name        String
+  startDate   String         @default("")
+  endDate     String         @default("")
+  status      MealPlanStatus @default(draft)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   template  Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
