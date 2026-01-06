@@ -731,3 +731,42 @@ Add a MealPlan Detail Page under:
 - Use Svelte 5 runes ($state, $effect)
 - Follow naming conventions and file structure used by previous features
 - Keep REST endpoints parallel to People / Ingredients / Recipes / Pantry patterns
+
+### Weekly Planner UI (NEW)
+
+Implement a basic Weekly Planner inside the meal plan detail page.
+
+**Scope**
+
+- No AI logic.
+- No automatic weekly generation.
+- Only CRUD UI using existing REST API.
+
+**Weekly Grid**
+
+- 7 fixed columns: Monday–Sunday.
+- Each column corresponds to a MealPlanDay.
+- If a day does not exist yet, create it on demand.
+
+**MealPlanDay UI**
+
+- Show:
+  - Day name
+  - List of MealPlanItems (render recipeName only)
+- Provide a button “Add item”.
+
+**Add Item**
+
+- Inline form:
+  - recipeName: text input
+- POST to:
+  `/api/mealplans/[mealPlanId]/days/[dayId]/items`
+- Refresh only that day’s items.
+
+**Implementation Rules**
+
+- Svelte 5 runes only.
+- Tailwind-styled layout.
+- Must reload correctly using GET endpoints.
+- Do not change Prisma schema or migrations.
+- No AI meal generation. No recipe linking. Only text.

@@ -1,6 +1,5 @@
 <script lang="ts">
 	type MealPlanStatus = 'draft' | 'active' | 'completed'
-	type MealPlanItemMealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
 	type MealPlanDto = {
 		id: string
@@ -15,8 +14,6 @@
 		id: string
 		dayId: string
 		recipeId: string
-		mealType: MealPlanItemMealType
-		servings: number
 		recipe: { id: string; name: string }
 	}
 
@@ -35,7 +32,7 @@
 
 	let { params } = $props<{ params: { mealPlanId: string } }>()
 
-	const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const
+	const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
 
 	let mealPlan = $state<MealPlanDto | null>(null)
 	let days = $state<DayDto[]>([])
@@ -44,205 +41,182 @@
 	let loading = $state(true)
 	let error = $state<string | null>(null)
 
-	let addingDay = $state(false)
-	let showAddDayForm = $state(false)
-	let newDayDate = $state('')
+	let openAddItemDate = $state<string | null>(null)
+	let recipeNameByDate = $state<Record<string, string>>({})
+	let creatingDayForDate = $state<string | null>(null)
+	let addingItemForDate = $state<string | null>(null)
 
-	let deletingDayId = $state<string | null>(null)
-	let deletingItemId = $state<string | null>(null)
-
-	let addItemStateByDayId = $state<Record<string, { recipeId: string; mealType: MealPlanItemMealType; servings: string }>>({})
-	let addingItemForDayId = $state<string | null>(null)
-	let openAddItemDayId = $state<string | null>(null)
-
-	function ensureDayItemState(dayId: string) {
-		if (addItemStateByDayId[dayId]) return
-		addItemStateByDayId = {
-			...addItemStateByDayId,
-			[dayId]: { recipeId: '', mealType: 'dinner', servings: '1' }
-		}
+	function isoDateOnlyLocal(d: Date): string {
+		const year = d.getFullYear()
+		const month = String(d.getMonth() + 1).padStart(2, '0')
+		const day = String(d.getDate()).padStart(2, '0')
+		return `${year}-${month}-${day}`
 	}
 
-	async function loadAll() {
-		loading = true
-		error = null
+	function startOfWeekMonday(today: Date): Date {
+		const d = new Date(today)
+		const dow = d.getDay() // 0 Sun .. 6 Sat
+		const daysSinceMonday = (dow + 6) % 7
+		d.setDate(d.getDate() - daysSinceMonday)
+		d.setHours(0, 0, 0, 0)
+		return d
+	}
 
-		try {
-			const [planRes, daysRes, recipesRes] = await Promise.all([
-				fetch(`/api/mealplans/${params.mealPlanId}`),
-				fetch(`/api/mealplans/${params.mealPlanId}/days`),
-				fetch('/api/recipes')
-			])
+	const weekDates = $derived.by(() => {
+		const start = startOfWeekMonday(new Date())
+		return Array.from({ length: 7 }, (_, i) => {
+			const d = new Date(start)
+			d.setDate(start.getDate() + i)
+			return isoDateOnlyLocal(d)
+		})
+	})
 
-			if (planRes.status === 404) {
-				mealPlan = null
-				days = []
-				error = 'Meal plan not found'
-				return
-			}
-			if (!planRes.ok) {
-				throw new Error(`Failed to load meal plan (${planRes.status})`)
-			}
+	const dayByDate = $derived.by(() => {
+		const map = new Map<string, DayDto>()
+		for (const d of days) map.set(d.date, d)
+		return map
+	})
 
-			if (!daysRes.ok) {
-				throw new Error(`Failed to load days (${daysRes.status})`)
-			}
+	function findRecipeIdByName(name: string): string | null {
+		const trimmed = name.trim()
+		if (!trimmed) return null
+		const lower = trimmed.toLowerCase()
+		const exact = recipes.find((r) => r.name.trim().toLowerCase() === lower)
+		if (exact) return exact.id
+		const prefix = recipes.find((r) => r.name.trim().toLowerCase().startsWith(lower))
+		return prefix?.id ?? null
+	}
 
-			if (!recipesRes.ok) {
-				throw new Error(`Failed to load recipes (${recipesRes.status})`)
-			}
-
-			mealPlan = (await planRes.json()) as MealPlanDto
-			const daysData = (await daysRes.json()) as { mealPlanId: string; days: DayDto[] }
-			days = daysData.days
-			const recipesData = (await recipesRes.json()) as { recipes: RecipeListItem[] }
-			recipes = recipesData.recipes
-
-			for (const d of days) ensureDayItemState(d.id)
-		} catch (e) {
+	async function loadMealPlan() {
+		const res = await fetch(`/api/mealplans/${params.mealPlanId}`)
+		if (res.status === 404) {
 			mealPlan = null
 			days = []
-			recipes = []
-			error = e instanceof Error ? e.message : 'Failed to load'
-		} finally {
-			loading = false
+			error = 'Meal plan not found'
+			return
 		}
+		if (!res.ok) throw new Error(`Failed to load meal plan (${res.status})`)
+		mealPlan = (await res.json()) as MealPlanDto
 	}
 
-	async function addDay() {
-		addingDay = true
-		error = null
+	async function loadDays() {
+		const res = await fetch(`/api/mealplans/${params.mealPlanId}/days`)
+		if (!res.ok) throw new Error(`Failed to load days (${res.status})`)
+		const daysData = (await res.json()) as { mealPlanId: string; days: DayDto[] }
+		days = daysData.days
+	}
 
+	async function loadRecipes() {
+		const res = await fetch('/api/recipes')
+		if (!res.ok) throw new Error(`Failed to load recipes (${res.status})`)
+		const recipesData = (await res.json()) as { recipes: RecipeListItem[] }
+		recipes = recipesData.recipes
+	}
+
+	async function refreshDayByDate(date: string) {
+		const res = await fetch(`/api/mealplans/${params.mealPlanId}/days`)
+		if (!res.ok) throw new Error(`Failed to refresh day (${res.status})`)
+		const daysData = (await res.json()) as { mealPlanId: string; days: DayDto[] }
+		const refreshed = daysData.days.find((d) => d.date === date)
+		if (!refreshed) {
+			days = days.filter((d) => d.date !== date)
+			return
+		}
+		days = days.map((d) => (d.date === date ? refreshed : d))
+	}
+
+	async function ensureDayExists(date: string): Promise<DayDto> {
+		const existing = dayByDate.get(date)
+		if (existing) return existing
+
+		creatingDayForDate = date
 		try {
-			const date = newDayDate.trim()
-			if (date.length === 0) {
-				error = 'Date is required'
-				return
-			}
-
 			const res = await fetch(`/api/mealplans/${params.mealPlanId}/days`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ date })
 			})
-
 			if (!res.ok) {
 				const payload = (await res.json().catch(() => null)) as { message?: string } | null
-				error = payload?.message ?? `Failed to add day (${res.status})`
-				return
+				throw new Error(payload?.message ?? `Failed to create day (${res.status})`)
 			}
-
-			newDayDate = ''
-			showAddDayForm = false
-			await loadAll()
-		} catch {
-			error = 'Failed to add day'
+			const created = (await res.json()) as DayDto
+			days = [...days, created]
+			return created
 		} finally {
-			addingDay = false
+			creatingDayForDate = null
 		}
 	}
 
-	async function deleteDay(dayId: string) {
-		if (!confirm('Delete this day?')) return
-		deletingDayId = dayId
+	async function openAddItem(date: string) {
 		error = null
-
 		try {
-			const res = await fetch(`/api/mealplans/${params.mealPlanId}/days/${dayId}`, { method: 'DELETE' })
-			if (!res.ok) {
-				const payload = (await res.json().catch(() => null)) as { message?: string } | null
-				error = payload?.message ?? `Failed to delete day (${res.status})`
-				return
-			}
-
-			await loadAll()
-		} catch {
-			error = 'Failed to delete day'
-		} finally {
-			deletingDayId = null
+			await ensureDayExists(date)
+			openAddItemDate = date
+			recipeNameByDate = { ...recipeNameByDate, [date]: recipeNameByDate[date] ?? '' }
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to prepare day'
 		}
 	}
 
-	async function addItem(dayId: string) {
-		addingItemForDayId = dayId
+	async function addItem(date: string) {
 		error = null
-
+		addingItemForDate = date
 		try {
-			ensureDayItemState(dayId)
-			const state = addItemStateByDayId[dayId]
-
-			const recipeId = state.recipeId
+			const day = await ensureDayExists(date)
+			const recipeName = recipeNameByDate[date] ?? ''
+			const recipeId = findRecipeIdByName(recipeName)
 			if (!recipeId) {
-				error = 'Recipe is required'
-				return
+				throw new Error('Recipe not found. Create it first on /recipes.')
 			}
 
-			const servings = Number(state.servings)
-			if (!Number.isFinite(servings) || servings <= 0) {
-				error = 'Servings must be a number > 0'
-				return
-			}
-
-			const res = await fetch(`/api/mealplans/${params.mealPlanId}/days/${dayId}/items`, {
+			const res = await fetch(`/api/mealplans/${params.mealPlanId}/days/${day.id}/items`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					recipeId,
-					mealType: state.mealType,
-					servings
-				})
+				body: JSON.stringify({ recipeId, mealType: 'dinner', servings: 1 })
 			})
 
 			if (!res.ok) {
 				const payload = (await res.json().catch(() => null)) as { message?: string } | null
-				error = payload?.message ?? `Failed to add item (${res.status})`
-				return
+				throw new Error(payload?.message ?? `Failed to add item (${res.status})`)
 			}
 
-			addItemStateByDayId = {
-				...addItemStateByDayId,
-				[dayId]: { recipeId: '', mealType: 'dinner', servings: '1' }
-			}
-			openAddItemDayId = null
-			await loadAll()
-		} catch {
-			error = 'Failed to add item'
+			recipeNameByDate = { ...recipeNameByDate, [date]: '' }
+			openAddItemDate = null
+			await refreshDayByDate(date)
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to add item'
 		} finally {
-			addingItemForDayId = null
-		}
-	}
-
-	async function deleteItem(dayId: string, itemId: string) {
-		if (!confirm('Delete this item?')) return
-		deletingItemId = itemId
-		error = null
-
-		try {
-			const res = await fetch(`/api/mealplans/${params.mealPlanId}/days/${dayId}/items/${itemId}`, {
-				method: 'DELETE'
-			})
-			if (!res.ok) {
-				const payload = (await res.json().catch(() => null)) as { message?: string } | null
-				error = payload?.message ?? `Failed to delete item (${res.status})`
-				return
-			}
-
-			await loadAll()
-		} catch {
-			error = 'Failed to delete item'
-		} finally {
-			deletingItemId = null
+			addingItemForDate = null
 		}
 	}
 
 	$effect(() => {
-		void loadAll()
+		loading = true
+		error = null
+		void (async () => {
+			try {
+				await Promise.all([loadMealPlan(), loadDays(), loadRecipes()])
+			} catch (e) {
+				mealPlan = null
+				days = []
+				recipes = []
+				error = e instanceof Error ? e.message : 'Failed to load'
+			} finally {
+				loading = false
+			}
+		})()
 	})
 </script>
 
-<main class="mx-auto max-w-xl p-6">
+<main class="mx-auto max-w-5xl p-6">
 	<div class="flex items-center justify-between gap-4">
-		<h1 class="text-2xl font-semibold">Meal Plan</h1>
+		<div>
+			<h1 class="text-2xl font-semibold">Meal Plan</h1>
+			{#if mealPlan}
+				<p class="mt-1 text-sm text-gray-700">{mealPlan.name} — {mealPlan.status}</p>
+			{/if}
+		</div>
 		<a class="text-sm underline" href="/mealplans">Back</a>
 	</div>
 
@@ -251,230 +225,98 @@
 	{:else if error}
 		<p class="mt-4 text-red-600">{error}</p>
 	{:else if mealPlan}
-		<div class="mt-4 space-y-8">
-			<section>
-				<h2 class="text-xl font-semibold">{mealPlan.name}</h2>
-				<p class="mt-1 text-sm text-gray-700">Status: {mealPlan.status}</p>
-			</section>
-
-			<section>
-				<div class="flex items-center justify-between gap-4">
-					<h3 class="text-lg font-semibold">Days</h3>
-					<button
-						class="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-60"
-						type="button"
-						onclick={() => {
-							showAddDayForm = !showAddDayForm
-						}}
-						disabled={addingDay}
-					>
-						Add Day
-					</button>
-				</div>
-
-				{#if showAddDayForm}
-					<form
-						class="mt-3 flex items-end gap-3"
-						onsubmit={(e) => {
-							e.preventDefault()
-							void addDay()
-						}}
-					>
-						<label class="block flex-1">
-							<span class="block text-sm font-medium">Date</span>
-							<input
-								class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-								type="date"
-								value={newDayDate}
-								oninput={(e) => {
-									newDayDate = (e.currentTarget as HTMLInputElement).value
-								}}
-								disabled={addingDay}
-							/>
-						</label>
-						<button
-							class="rounded border border-gray-300 px-4 py-2 text-sm disabled:opacity-60"
-							type="button"
-							onclick={() => {
-								showAddDayForm = false
-							}}
-							disabled={addingDay}
-						>
-							Cancel
-						</button>
-						<button class="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-60" type="submit" disabled={addingDay}>
-							{addingDay ? 'Adding…' : 'Add Day'}
-						</button>
-					</form>
-				{/if}
-			</section>
-
-			<section>
-				{#if days.length === 0}
-					<p class="mt-2 text-sm">No days yet.</p>
-				{:else}
-					<div class="mt-3 space-y-4">
-						{#each days as day (day.id)}
+		<section class="mt-6">
+			<h2 class="text-lg font-semibold">Weekly planner</h2>
+			<div class="mt-3 overflow-x-auto">
+				<div class="min-w-[900px]">
+					<div class="grid grid-cols-7 gap-3">
+						{#each weekDates as date, idx (date)}
+							{@const day = dayByDate.get(date) ?? null}
 							<div class="rounded border border-gray-200 p-3">
-								<div class="flex items-start justify-between gap-4">
+								<div class="flex items-start justify-between gap-3">
 									<div>
-										<p class="font-medium">{day.date}</p>
-										<p class="mt-1 text-xs text-gray-700">{day.items.length} items</p>
+										<p class="text-sm font-semibold">{WEEKDAYS[idx]}</p>
+										<p class="text-xs text-gray-700">{date}</p>
 									</div>
 									<button
-										class="rounded border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+										class="rounded border border-gray-300 px-3 py-1 text-sm disabled:opacity-60"
 										type="button"
 										onclick={() => {
-											void deleteDay(day.id)
+											void openAddItem(date)
 										}}
-										disabled={deletingDayId === day.id}
+										disabled={creatingDayForDate === date}
 									>
-										{deletingDayId === day.id ? 'Deleting…' : 'Delete day'}
+										Add item
 									</button>
 								</div>
 
-								{#if day.items.length > 0}
+								{#if !day || day.items.length === 0}
+									<p class="mt-3 text-sm text-gray-700">No items</p>
+								{:else}
 									<ul class="mt-3 space-y-2">
 										{#each day.items as item (item.id)}
-											<li class="flex items-center justify-between gap-4 rounded border border-gray-100 px-3 py-2">
-												<div class="text-sm">
-													<span class="font-medium">{item.recipe.name}</span>
-													<span class="text-gray-700"> — {item.mealType}, {item.servings} servings</span>
-												</div>
-												<button
-													class="rounded border border-gray-300 px-3 py-1 text-sm disabled:opacity-60"
-													type="button"
-													onclick={() => {
-														void deleteItem(day.id, item.id)
-													}}
-													disabled={deletingItemId === item.id}
-												>
-													{deletingItemId === item.id ? 'Deleting…' : 'Delete'}
-												</button>
-											</li>
+											<li class="rounded border border-gray-100 px-2 py-1 text-sm">{item.recipe.name}</li>
 										{/each}
 									</ul>
 								{/if}
 
-								<div class="mt-4 rounded border border-gray-100 p-3">
-									<div class="flex items-center justify-between gap-4">
-										<h4 class="text-sm font-medium">Items</h4>
-										<button
-											class="rounded border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
-											type="button"
-											onclick={() => {
-												openAddItemDayId = openAddItemDayId === day.id ? null : day.id
-												ensureDayItemState(day.id)
-											}}
-										>
-											Add Item
-										</button>
-									</div>
-
-									{#if openAddItemDayId === day.id}
-										<form
-											class="mt-3 grid gap-3"
-											onsubmit={(e) => {
-												e.preventDefault()
-												void addItem(day.id)
-											}}
-										>
+								{#if openAddItemDate === date}
+									<form
+										class="mt-4 space-y-2"
+										onsubmit={(e) => {
+											e.preventDefault()
+											void addItem(date)
+										}}
+									>
 										<label class="block">
 											<span class="block text-sm font-medium">Recipe</span>
-											<select
-												class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-												value={addItemStateByDayId[day.id]?.recipeId ?? ''}
-												onchange={(e) => {
-													ensureDayItemState(day.id)
-													addItemStateByDayId = {
-														...addItemStateByDayId,
-														[day.id]: {
-															...addItemStateByDayId[day.id],
-															recipeId: (e.currentTarget as HTMLSelectElement).value
-														}
-													}
-												}}
-												disabled={addingItemForDayId === day.id || recipes.length === 0}
-											>
-												<option value="">Select…</option>
-												{#each recipes as r (r.id)}
-													<option value={r.id}>{r.name}</option>
-												{/each}
-											</select>
-										</label>
-
-										<label class="block">
-											<span class="block text-sm font-medium">Meal type</span>
-											<select
-												class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-												value={addItemStateByDayId[day.id]?.mealType ?? 'dinner'}
-												onchange={(e) => {
-													ensureDayItemState(day.id)
-													addItemStateByDayId = {
-														...addItemStateByDayId,
-														[day.id]: {
-															...addItemStateByDayId[day.id],
-															mealType: (e.currentTarget as HTMLSelectElement).value as MealPlanItemMealType
-														}
-													}
-												}}
-												disabled={addingItemForDayId === day.id}
-											>
-												{#each MEAL_TYPES as mt (mt)}
-													<option value={mt}>{mt}</option>
-												{/each}
-											</select>
-										</label>
-
-										<label class="block">
-											<span class="block text-sm font-medium">Servings</span>
 											<input
 												class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-												type="number"
-												min="0"
-												step="0.5"
-												value={addItemStateByDayId[day.id]?.servings ?? '1'}
+												type="text"
+												list="recipe-names"
+												placeholder="Type recipe name…"
+												value={recipeNameByDate[date] ?? ''}
 												oninput={(e) => {
-													ensureDayItemState(day.id)
-													addItemStateByDayId = {
-														...addItemStateByDayId,
-														[day.id]: {
-															...addItemStateByDayId[day.id],
-															servings: (e.currentTarget as HTMLInputElement).value
-														}
-													}
-												}}
-												disabled={addingItemForDayId === day.id}
+												recipeNameByDate = {
+													...recipeNameByDate,
+													[date]: (e.currentTarget as HTMLInputElement).value
+												}
+											}}
+												disabled={addingItemForDate === date}
 											/>
 										</label>
-
-										<button
-											class="rounded bg-black px-4 py-2 text-white disabled:opacity-60"
-											type="submit"
-											disabled={addingItemForDayId === day.id}
-										>
-											{addingItemForDayId === day.id ? 'Adding…' : 'Add item'}
-										</button>
-									</form>
-									<div class="mt-2">
-										<button
-											class="text-sm underline disabled:opacity-60"
-											type="button"
-											onclick={() => {
-												openAddItemDayId = null
+										<div class="flex items-center gap-3">
+											<button
+												class="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-60"
+												type="submit"
+												disabled={addingItemForDate === date}
+											>
+												{addingItemForDate === date ? 'Adding…' : 'Add'}
+											</button>
+											<button
+												class="text-sm underline disabled:opacity-60"
+												type="button"
+												onclick={() => {
+												openAddItemDate = null
 											}}
-											disabled={addingItemForDayId === day.id}
-										>
-											Cancel
-										</button>
-									</div>
+												disabled={addingItemForDate === date}
+											>
+												Cancel
+											</button>
+										</div>
+									</form>
 								{/if}
-								</div>
 							</div>
 						{/each}
 					</div>
-				{/if}
-			</section>
-		</div>
+				</div>
+			</div>
+
+			<datalist id="recipe-names">
+				{#each recipes as r (r.id)}
+					<option value={r.name}></option>
+				{/each}
+			</datalist>
+		</section>
 	{/if}
 </main>
