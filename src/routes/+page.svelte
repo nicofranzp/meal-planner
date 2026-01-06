@@ -25,6 +25,21 @@
 	let personName = $state('')
 	let personPortionFactor = $state('1.0')
 
+	type IngredientDto = {
+		id: string
+		name: string
+		unit: string
+		createdAt: string
+		updatedAt: string
+	}
+
+	let ingredients = $state<IngredientDto[]>([])
+	let ingredientsLoading = $state(true)
+	let ingredientsError = $state<string | null>(null)
+	let addingIngredient = $state(false)
+	let ingredientName = $state('')
+	let ingredientUnit = $state('')
+
 	async function loadHousehold() {
 		loading = true
 		error = null
@@ -134,9 +149,62 @@
 		}
 	}
 
+	async function loadIngredients() {
+		ingredientsLoading = true
+		ingredientsError = null
+
+		try {
+			const res = await fetch('/api/ingredients')
+			if (!res.ok) {
+				ingredientsError = `Failed to load ingredients (${res.status})`
+				ingredients = []
+				return
+			}
+
+			const data = (await res.json()) as { ingredients: IngredientDto[] }
+			ingredients = data.ingredients
+		} catch {
+			ingredientsError = 'Failed to load ingredients'
+			ingredients = []
+		} finally {
+			ingredientsLoading = false
+		}
+	}
+
+	async function addIngredient() {
+		addingIngredient = true
+		ingredientsError = null
+
+		try {
+			const name = ingredientName.trim()
+			const unit = ingredientUnit.trim()
+
+			const res = await fetch('/api/ingredients', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name, unit })
+			})
+
+			if (!res.ok) {
+				const payload = (await res.json().catch(() => null)) as { message?: string } | null
+				ingredientsError = payload?.message ?? `Failed to add (${res.status})`
+				return
+			}
+
+			ingredientName = ''
+			ingredientUnit = ''
+			await loadIngredients()
+		} catch {
+			ingredientsError = 'Failed to add ingredient'
+		} finally {
+			addingIngredient = false
+		}
+	}
+
 	$effect(() => {
 		void loadHousehold()
 		void loadPeople()
+		void loadIngredients()
 	})
 </script>
 
@@ -248,6 +316,77 @@
 							<li class="rounded border border-gray-200 px-3 py-2">
 								<div class="font-medium">{person.name}</div>
 								<div class="text-sm text-gray-600">Portion factor: {person.portionFactor}</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{/if}
+		</section>
+
+		<section class="mt-10">
+			<h2 class="text-xl font-semibold">Ingredients</h2>
+
+			{#if ingredientsLoading}
+				<p class="mt-3">Loading…</p>
+			{:else if ingredientsError}
+				<p class="mt-3 text-red-600">{ingredientsError}</p>
+			{/if}
+
+			<form
+				class="mt-4 grid gap-3"
+				onsubmit={(e) => {
+					e.preventDefault()
+					void addIngredient()
+				}}
+			>
+				<label class="block">
+					<span class="block text-sm font-medium">Name</span>
+					<input
+						class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+						type="text"
+						value={ingredientName}
+						oninput={(e) => {
+							ingredientName = (e.currentTarget as HTMLInputElement).value
+						}}
+						disabled={addingIngredient}
+						autocomplete="off"
+					/>
+				</label>
+
+				<label class="block">
+					<span class="block text-sm font-medium">Unit</span>
+					<input
+						class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+						type="text"
+						value={ingredientUnit}
+						oninput={(e) => {
+							ingredientUnit = (e.currentTarget as HTMLInputElement).value
+						}}
+						disabled={addingIngredient}
+						autocomplete="off"
+					/>
+				</label>
+
+				<div class="flex items-center gap-3">
+					<button
+						class="rounded bg-black px-4 py-2 text-white disabled:opacity-60"
+						type="submit"
+						disabled={addingIngredient}
+					>
+						{addingIngredient ? 'Adding…' : 'Add ingredient'}
+					</button>
+				</div>
+			</form>
+
+			{#if !ingredientsLoading && !ingredientsError}
+				{#if ingredients.length === 0}
+					<p class="mt-4 text-sm">No ingredients yet.</p>
+				{:else}
+					<ul class="mt-4 space-y-2">
+						{#each ingredients as ingredient (ingredient.id)}
+							<li class="rounded border border-gray-200 px-3 py-2">
+								<div class="font-medium">{ingredient.name}</div>
+								<div class="text-sm text-gray-600">Unit: {ingredient.unit}</div>
 							</li>
 						{/each}
 					</ul>

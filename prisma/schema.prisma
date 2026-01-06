@@ -50,12 +50,16 @@ model Person {
 }
 
 model Ingredient {
-  id       String @id @default(cuid())
-  name     String
-  category String
+  id        String   @id @default(cuid())
+  name      String
+  unit      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   recipeIngredients RecipeIngredient[]
   pantryItems       PantryItem[]
+
+  @@unique([name])
 }
 
 model Recipe {

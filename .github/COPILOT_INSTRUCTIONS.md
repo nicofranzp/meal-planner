@@ -377,12 +377,44 @@ Leave a TODO or ask the developer.
 
 Copilot must never assume product behavior.
 
----
-
-## End of instructions
 
 ---
 
-## Recommended Copilot prompt
+## FEATURE: Ingredient
 
-Follow COPILOT_INSTRUCTIONS.md exactly. We are using Svelte 5 with Runes.
+Implement the Ingredient entity.
+
+### Domain rules
+
+- Ingredient is global (not household-specific)
+- One canonical ingredient list for the entire app
+- Ingredient names must be unique (case-insensitive)
+
+### Ingredient fields
+
+- id: string (cuid, primary key)
+- name: string (required)
+- unit: string (required, e.g. g, ml, unit)
+- createdAt
+- updatedAt
+
+### MVP API
+
+- GET /api/ingredients → list all ingredients
+- POST /api/ingredients → create ingredient
+
+### MVP UI
+
+- List all ingredients
+- Form to add ingredient:
+  - name (text)
+  - unit (text)
+- Prevent duplicate names
+- Persist across reloads
+
+### Tech constraints
+
+- SvelteKit
+- Svelte 5 runes
+- Prisma + SQLite
+- Prisma Client only (no raw SQL)
