@@ -8,15 +8,15 @@ type MealPlanItemMealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 type DayItemDto = {
 	id: string
 	dayId: string
-	recipeId: string
+	recipeId: string | null
 	mealType: MealPlanItemMealType
-	servings: number
+	servings: number | null
 	createdAt: string
 	updatedAt: string
 	recipe: {
 		id: string
 		name: string
-	}
+	} | null
 }
 
 type DayDto = {

@@ -770,3 +770,134 @@ Implement a basic Weekly Planner inside the meal plan detail page.
 - Must reload correctly using GET endpoints.
 - Do not change Prisma schema or migrations.
 - No AI meal generation. No recipe linking. Only text.
+
+## FEATURE: Templates (Weekly/Biweekly Planning Blueprints)
+
+Implement the Template System that allows users to define reusable meal-planning structures and generate MealPlans from them.
+
+### Domain Rules
+
+Template
+
+- id: string (cuid)
+- householdId: string (FK → Household)
+- name: string (required)
+- description: string?
+- durationDays: number (≥1; typically 7 or 14)
+- createdAt
+- updatedAt
+
+TemplateSlot
+
+- id: string (cuid)
+- templateId: string (FK → Template)
+- dayNumber: number (1…durationDays)
+- mealType: MealType enum
+- notes: string?
+- createdAt
+- updatedAt
+
+Validation:
+
+- One slot per (dayNumber, mealType)
+- dayNumber ≤ durationDays
+
+### Relationships
+
+- Template has many TemplateSlots
+- TemplateSlot belongs to Template
+- Template belongs to Household
+
+### API Requirements (REST)
+
+GET /api/templates
+
+- Return all templates for the household.
+
+POST /api/templates
+Body:
+
+- name (required)
+- description?
+- durationDays (required)
+Creates a template (no slots yet).
+
+GET /api/templates/[templateId]
+
+- Return template + templateSlots[].
+
+PATCH /api/templates/[templateId]
+
+- Update name, description, durationDays.
+- Reject durationDays shrink that invalidates existing slots.
+
+DELETE /api/templates/[templateId]
+
+- Cascade delete templateSlots.
+
+### Slot Endpoints
+
+POST /api/templates/[templateId]/slots
+Body:
+
+- dayNumber
+- mealType
+- notes?
+
+PATCH /api/templates/[templateId]/slots/[slotId]
+
+- Update dayNumber, mealType, notes.
+
+DELETE /api/templates/[templateId]/slots/[slotId]
+
+### MealPlan Generation From Template
+
+POST /api/templates/[templateId]/generate
+Body:
+
+- name (MealPlan name)
+- startDate (YYYY-MM-DD)
+
+Process:
+
+1. Create MealPlan (status=draft).
+2. Create MealPlanDay for durationDays.
+3. For each TemplateSlot:
+   - Create MealPlanItem with:
+     - mealType = slot.mealType
+     - recipeId = null
+     - servings = null
+     - dayId = startDate + (slot.dayNumber − 1)
+
+Returns: mealPlan with days[] and items[].
+
+### UI Requirements (Svelte 5)
+
+Add route: /templates
+
+Template List Page
+
+- Show all templates
+- Add Template button
+- Clicking a template opens detail
+
+Template Detail Page
+
+- Show template info
+- List slots grouped by day
+- Add slot form
+- Edit/delete slot
+- Generate MealPlan button
+
+Generate MealPlan Page
+
+- Enter MealPlan name + start date
+- POST to generate endpoint
+- Redirect to created MealPlan detail page
+
+### Technical Constraints
+
+- Use Prisma + SQLite
+- Use Svelte 5 runes
+- Follow style/patterns of Household, Person, Ingredient, Pantry, Recipes, MealPlans
+- No AI logic yet (AI comes later)

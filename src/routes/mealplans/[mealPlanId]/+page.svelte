@@ -12,10 +12,10 @@
 	type DayItemDto = {
 		id: string
 		dayId: string
-		recipeId: string
+		recipeId: string | null
 		recipeName: string
 		mealType: string
-		servings: number
+		servings: number | null
 	}
 
 	type DayDto = {
@@ -27,10 +27,10 @@
 	type ItemDto = {
 		id: string
 		dayId: string
-		recipeId: string
+		recipeId: string | null
 		recipeName: string
 		mealType: string
-		servings: number
+		servings: number | null
 	}
 
 	type RecipeListItem = {
@@ -104,8 +104,9 @@
 		})
 	}
 
-	function formatServings(value: number): string {
-		if (!Number.isFinite(value)) return '0 servings'
+	function formatServings(value: number | null): string {
+		if (value === null) return '—'
+		if (!Number.isFinite(value)) return '—'
 		if (value === 1) return '1 serving'
 		return `${value} servings`
 	}

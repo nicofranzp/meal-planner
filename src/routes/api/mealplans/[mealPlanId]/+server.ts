@@ -15,19 +15,19 @@ type MealPlanDto = {
 		items: Array<{
 			id: string
 			dayId: string
-			recipeId: string
+			recipeId: string | null
 			recipeName: string
 			mealType: string
-			servings: number
+			servings: number | null
 		}>
 	}>
 	items: Array<{
 		id: string
 		dayId: string
-		recipeId: string
+		recipeId: string | null
 		recipeName: string
 		mealType: string
-		servings: number
+		servings: number | null
 	}>
 }
 
@@ -70,7 +70,7 @@ export const GET: RequestHandler = async ({ params }) => {
 			id: i.id,
 			dayId: i.dayId,
 			recipeId: i.recipeId,
-			recipeName: i.recipe.name,
+			recipeName: i.recipe?.name ?? '(unassigned)',
 			mealType: i.mealType,
 			servings: i.servings
 		}))
